@@ -1,0 +1,71 @@
+BBP (Business Blue Print): Definição de todos os processos do cliente. É um documento fundamental para guiar a implementação de sistemas de produção.
+
+Make to Order (Feito para pedido): Estratégia de produção puxada, onde a fabricação é iniciada apenas após a confirmação do pedido do cliente.
+
+Make to stock (Feito para estoque): Estratégia de produção empurrada, onde os produtos são fabricados para manter um nível de estoque pré-definido.
+
+O.E.E (Overall Equipment Effectiveness): Eficiência Global do Equipamento, um indicador chave de desempenho (KPI) que mede a produtividade da manufatura.
+
+TPM (Total Productive Maintenance): Manutenção Produtiva Total, uma metodologia para garantir as boas práticas produtivas através da manutenção proativa e envolvimento dos operadores.
+
+BATELADA: Agrupamento de apontamentos de produção, permitindo a realização de vários serviços ou ordens de forma simultânea para otimização de recursos.
+
+POC (Proof Of Project): Prova de Conceito do Projeto, uma fase de validação para confirmar a viabilidade de um produto, serviço ou projeto antes do desenvolvimento completo.
+
+PCP (Planejamento e Controle de Produção): Setor responsável por planejar quando, quanto, onde e como produzir, otimizando os recursos da fábrica.
+
+INVOICE: Fatura comercial utilizada na venda de uma empresa brasileira para outro país.
+
+SHELF LIFE: Termo em inglês para a vida útil ou data de validade de um produto.
+
+PICKING: Processo de separação e embalagem de produtos para a entrega ao cliente.
+
+SKU (Stock Keeping Unit): Unidade de Manutenção de Estoque. É um código único que identifica um item específico no inventário.
+
+CPV (Custo de Produção Vendida): Custo total dos produtos vendidos em um determinado período.
+
+CMV (Custo de Mercadoria Vendida): O custo total para adquirir as mercadorias que uma empresa vendeu.
+
+CMME (Custo Móvel Médio de Estoque): Método de custeio de estoque que calcula o custo médio dos itens em inventário.
+
+CUSTEIO POR ABSORÇÃO: Método contábil que agrupa todos os custos de fabricação, diretos e indiretos, na apuração do custo do produto.
+
+GGF (Gastos Gerais de Fabricação): Todas as despesas da produção, exceto os custos de material direto e mão de obra direta.
+
+MES (Manufacturing Execution Systems): Sistema de Execução de Manufatura, software que monitora e gerencia o trabalho em tempo real no chão de fábrica.
+
+GEMBA: Termo japonês que significa "o lugar real", referindo-se ao local onde o valor é criado, como o chão de fábrica.
+
+PIPELINE: Termo em inglês para o funil de vendas, representando as etapas do processo de vendas desde o primeiro contato até o fechamento.
+
+Os 3 Ks do Lean Manufacturing: KAIKAKU (mudança radical ou revolucionária), KAIZEN (melhoria contínua e incremental) e KAKUSHIN (inovação e renovação).
+
+BUDGET: Termo em inglês para orçamento financeiro ou de projeto.
+
+ROADMAP: Roteiro estratégico que descreve os principais passos ou metas de um projeto ou produto ao longo do tempo.
+
+XPTO: Gíria corporativa para designar algo como exemplo, ou em alguns contextos, algo de alta qualidade (ex: Soluções XPTO).
+
+CROSS SELL: Estratégia de vendas que consiste em oferecer produtos ou serviços complementares ao que o cliente já está comprando.
+
+UP SELL: Estratégia de vendas para oferecer ao cliente uma versão mais robusta, completa e, geralmente, mais cara do produto que ele pretende comprar.
+
+T.I. (Tecnologia da Informação): Área responsável pela gestão da informação e recursos de computação em uma organização.
+
+T.O. (Tecnologia Operacional): Área responsável pelo hardware e software que detecta ou causa uma mudança através do monitoramento e controle de dispositivos e processos industriais.
+
+Bill Of Material (B.O.M): Lista de Materiais. A estrutura completa de componentes, matérias-primas e subconjuntos necessários para produzir um produto acabado.
+
+Bill Of Process (B.O.P): Lista de Processos. O roteiro de todas as operações de fabricação necessárias para construir um produto.
+
+ERP ON PREMISE: Sistema ERP instalado e operado localmente, nos servidores da própria empresa.
+
+RNC (Relatório de Não Conformidade): Documento formal que registra a ocorrência de um desvio de um requisito pré-estabelecido, seja de um produto, processo ou sistema.
+
+ICP (Industry Cloud Platforms): Plataforma de nuvem industrial, ambientes em nuvem com ferramentas e serviços específicos para as necessidades de uma determinada indústria.
+
+ERP COMPOSABLE: Uma abordagem tecnológica onde o ERP é construído a partir de componentes de negócios que podem ser combinados (compostos), permitindo maior agilidade e integração com tecnologias como IA, ML e IoT em um ambiente 100% em nuvem.
+
+INOVAÇÃO DISRUPTIVA: Processo em que uma tecnologia, produto ou serviço é substituído por uma solução inovadora superior, geralmente mais simples e acessível para o consumidor.
+
+MIGRAÇÃO LIFT AND SHIFT: Estratégia de migração para a nuvem que consiste em "Elevar e Deslocar", ou seja, mover uma aplicação e seus dados associados para a nu-in com o mínimo ou nenhuma alteração na arquitetura.
