@@ -3,14 +3,15 @@ import streamlit as st
 import os
 from dotenv import load_dotenv
 from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate  # <-- A LINHA QUE FALTAVA
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+# --- MUDANÇA NA IMPORTAÇÃO DO BANCO DE VETORES ---
+from langchain_community.vectorstores import FAISS
 
 # Carrega as variáveis do arquivo .env
 load_dotenv()
@@ -47,9 +48,14 @@ def carregar_e_processar_dados():
 
     todos_os_chunks = chunks_padrao + chunks_glossario
     embeddings = HuggingFaceEmbeddings(model_name='paraphrase-multilingual-MiniLM-L12-v2')
-    db = Chroma.from_documents(todos_os_chunks, embeddings)
+    
+    # --- MUDANÇA NA CRIAÇÃO DO BANCO DE VETORES ---
+    db = FAISS.from_documents(todos_os_chunks, embeddings)
+    
     return db.as_retriever(search_type="mmr", search_kwargs={"k": 5})
 
+# --- O restante do código (PERSONAS e INTERFACE) permanece exatamente o mesmo ---
+# (Cole o resto do seu código aqui, pois ele não muda)
 # --- 3. DEFINIÇÃO DAS PERSONAS ---
 prompt_template_geral = ChatPromptTemplate.from_template("""
 Você é um consultor especialista no sistema DiamondOne para indústrias de manufatura. Sua tarefa é responder à pergunta do usuário de forma clara, profissional e objetiva. Baseie sua resposta estritamente no seguinte contexto extraído da documentação:

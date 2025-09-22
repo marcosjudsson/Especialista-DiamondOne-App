@@ -7,4 +7,4 @@ langchain-community
 pypdf
 docx2txt
 sentence-transformers
-chromadb
+faiss-cpu
