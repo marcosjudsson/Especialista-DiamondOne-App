@@ -10,8 +10,9 @@ from langchain.chains import create_retrieval_chain
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
-# --- MUDANÇA NA IMPORTAÇÃO DO BANCO DE VETORES ---
 from langchain_community.vectorstores import FAISS
+# --- NOVA IMPORTAÇÃO PARA A FERRAMENTA DE BUSCA ---
+from langchain_community.tools.tavily_search import TavilySearchResults
 
 # Carrega as variáveis do arquivo .env
 load_dotenv()
@@ -71,30 +72,38 @@ Você é um Analista de Implementação Sênior do DiamondOne. Sua tarefa é for
 Pergunta Técnica: {input}
 """)
 prompt_template_analista = ChatPromptTemplate.from_template("""
-Você é um "Analista de Conhecimento" especializado na indústria de manufatura e no sistema DiamondOne.
-Sua tarefa é analisar o "Texto para Análise" fornecido e compará-lo com o "Contexto do Glossário Atual".
-Sua missão é identificar e extrair apenas os termos, siglas ou jargões técnicos do "Texto para Análise" que AINDA NÃO ESTÃO no glossário.
-Apresente os novos termos em uma lista simples, com uma breve definição baseada no texto. Se nenhum termo novo for encontrado, simplesmente responda "Nenhum termo novo encontrado".
+Você é um "Analista de Conhecimento" sênior. Sua tarefa é criar uma definição robusta e otimizada para um termo técnico, baseando-se em múltiplas fontes.
 
-Contexto do Glossário Atual:
+**Processo de 4 Passos:**
+1.  **Análise Primária:** Leia a definição inicial fornecida no "Texto para Análise".
+2.  **Contexto Interno:** Verifique o "Contexto do Glossário Atual" para ver se o termo já existe ou se há termos relacionados.
+3.  **Pesquisa Externa:** Use os "Resultados da Busca na Web" para obter definições alternativas, contexto adicional e exemplos de uso.
+4.  **Síntese Final:** Com base em TODAS as fontes, escreva uma única e clara "Definição Otimizada". Esta definição deve ser completa, fácil de entender e estruturada para ser facilmente utilizada por um sistema de IA no futuro. Se as fontes conflitarem, use seu julgamento para criar a melhor definição possível.
+
+**Contexto do Glossário Atual:**
 <context>
 {context}
 </context>
 
-Texto para Análise: {input}
+**Resultados da Busca na Web:**
+<web_search_results>
+{web_search_results}
+</web_search_results>
 
-Novos Termos Sugeridos:
+**Texto para Análise:** {input}
+
+**Definição Otimizada:**
 """)
 
 personas = {
     "Consultor Geral": prompt_template_geral,
     "Estrategista de Marketing": prompt_template_marketing,
     "Analista de Implementação": prompt_template_implementacao,
-    "Analista de Conhecimento (Beta)": prompt_template_analista
+    "Analista de Conhecimento (Híbrido)": prompt_template_analista
 }
 
 # --- 4. CONSTRUÇÃO DA INTERFACE (com lógica condicional) ---
-st.title("🤖 Especialista Virtual DiamondOne")
+st.title("🤖 Especialista Virtual DiamondOne V2.0")
 st.caption("Desenvolvido com a mentoria do CriAi")
 
 st.sidebar.title("Configurações")
@@ -104,7 +113,7 @@ prompt_selecionado = personas[modo_selecionado_nome]
 st.header(f"Conversando com o {modo_selecionado_nome}")
 
 # --- LÓGICA DE INTERFACE CUSTOMIZADA ---
-if modo_selecionado_nome == "Analista de Conhecimento (Beta)":
+if modo_selecionado_nome == "Analista de Conhecimento (Híbrido)":
     st.info("Cole abaixo um artigo, e-mail ou qualquer texto para que o especialista sugira novos termos para o nosso glossário.")
     pergunta_usuario = st.text_area("Texto para análise:", height=300)
 else:
@@ -114,19 +123,46 @@ else:
 if pergunta_usuario:
     with st.spinner("Processando..."):
         try:
-            if os.getenv("GOOGLE_API_KEY") is None:
-                st.error("Chave de API do Google não carregada!")
+            if os.getenv("GOOGLE_API_KEY") is None or os.getenv("TAVILY_API_KEY") is None:
+                st.error("Chaves de API não carregadas do arquivo .env!")
                 st.stop()
 
             retriever = carregar_e_processar_dados()
-            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.5)
-            document_chain = create_stuff_documents_chain(llm, prompt_selecionado)
-            chain = create_retrieval_chain(retriever, document_chain)
-            response = chain.invoke({"input": pergunta_usuario})
-            
-            st.success("Resposta Recebida!")
-            st.subheader("Resposta do Especialista:")
-            st.markdown(response["answer"])
+            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.3)
+
+            # --- LÓGICA CUSTOMIZADA PARA O ANALISTA HÍBRIDO ---
+            if modo_selecionado_nome == "Analista de Conhecimento (Híbrido)":
+                st.subheader("Análise Híbrida em Andamento...")
+                
+                # Passo 1: Busca na Web
+                search_tool = TavilySearchResults()
+                web_results = search_tool.invoke({"query": f"O que é {pergunta_usuario} na indústria de manufatura"})
+                
+                # Passo 2: Busca no nosso glossário
+                docs_internos = retriever.invoke(pergunta_usuario)
+
+                # Passo 3: Criação da cadeia de síntese final
+                synthesis_chain = create_stuff_documents_chain(llm, prompt_selecionado)
+                
+                # Invocamos a cadeia com todas as informações
+                response = synthesis_chain.invoke({
+                    "input": pergunta_usuario,
+                    "context": docs_internos,
+                    "web_search_results": web_results
+                })
+                
+                st.success("Análise Híbrida Concluída!")
+                st.subheader("Definição Otimizada Sugerida:")
+                st.markdown(response)
+
+            else: # Lógica padrão para as outras personas
+                document_chain = create_stuff_documents_chain(llm, prompt_selecionado)
+                chain = create_retrieval_chain(retriever, document_chain)
+                response = chain.invoke({"input": pergunta_usuario})
+                
+                st.success("Resposta Recebida!")
+                st.subheader("Resposta do Especialista:")
+                st.markdown(response["answer"])
 
         except Exception as e:
             st.error(f"Ocorreu um erro: {e}")
