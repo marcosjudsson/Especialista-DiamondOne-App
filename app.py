@@ -54,8 +54,6 @@ def carregar_e_processar_dados():
     
     return db.as_retriever(search_type="mmr", search_kwargs={"k": 5})
 
-# --- O restante do código (PERSONAS e INTERFACE) permanece exatamente o mesmo ---
-# (Cole o resto do seu código aqui, pois ele não muda)
 # --- 3. DEFINIÇÃO DAS PERSONAS ---
 prompt_template_geral = ChatPromptTemplate.from_template("""
 Você é um consultor especialista no sistema DiamondOne para indústrias de manufatura. Sua tarefa é responder à pergunta do usuário de forma clara, profissional e objetiva. Baseie sua resposta estritamente no seguinte contexto extraído da documentação:
@@ -72,14 +70,30 @@ Você é um Analista de Implementação Sênior do DiamondOne. Sua tarefa é for
 <context>{context}</context>
 Pergunta Técnica: {input}
 """)
+prompt_template_analista = ChatPromptTemplate.from_template("""
+Você é um "Analista de Conhecimento" especializado na indústria de manufatura e no sistema DiamondOne.
+Sua tarefa é analisar o "Texto para Análise" fornecido e compará-lo com o "Contexto do Glossário Atual".
+Sua missão é identificar e extrair apenas os termos, siglas ou jargões técnicos do "Texto para Análise" que AINDA NÃO ESTÃO no glossário.
+Apresente os novos termos em uma lista simples, com uma breve definição baseada no texto. Se nenhum termo novo for encontrado, simplesmente responda "Nenhum termo novo encontrado".
+
+Contexto do Glossário Atual:
+<context>
+{context}
+</context>
+
+Texto para Análise: {input}
+
+Novos Termos Sugeridos:
+""")
 
 personas = {
     "Consultor Geral": prompt_template_geral,
     "Estrategista de Marketing": prompt_template_marketing,
-    "Analista de Implementação": prompt_template_implementacao
+    "Analista de Implementação": prompt_template_implementacao,
+    "Analista de Conhecimento (Beta)": prompt_template_analista
 }
 
-# --- 4. CONSTRUÇÃO DA INTERFACE ---
+# --- 4. CONSTRUÇÃO DA INTERFACE (com lógica condicional) ---
 st.title("🤖 Especialista Virtual DiamondOne")
 st.caption("Desenvolvido com a mentoria do CriAi")
 
@@ -88,14 +102,20 @@ modo_selecionado_nome = st.sidebar.selectbox("Selecione a Persona:", options=lis
 prompt_selecionado = personas[modo_selecionado_nome]
 
 st.header(f"Conversando com o {modo_selecionado_nome}")
-pergunta_usuario = st.text_input("Faça sua pergunta ou descreva a tarefa:")
+
+# --- LÓGICA DE INTERFACE CUSTOMIZADA ---
+if modo_selecionado_nome == "Analista de Conhecimento (Beta)":
+    st.info("Cole abaixo um artigo, e-mail ou qualquer texto para que o especialista sugira novos termos para o nosso glossário.")
+    pergunta_usuario = st.text_area("Texto para análise:", height=300)
+else:
+    pergunta_usuario = st.text_input("Faça sua pergunta ou descreva a tarefa:")
+# ----------------------------------------
 
 if pergunta_usuario:
-    with st.spinner("Processando... O especialista está pensando..."):
+    with st.spinner("Processando..."):
         try:
             if os.getenv("GOOGLE_API_KEY") is None:
-                st.error("Chave de API do Google não carregada do arquivo .env!")
-                st.warning("Verifique se o arquivo .env existe na mesma pasta do app.py e contém a sua GOOGLE_API_KEY.")
+                st.error("Chave de API do Google não carregada!")
                 st.stop()
 
             retriever = carregar_e_processar_dados()
