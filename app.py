@@ -20,9 +20,9 @@ st.set_page_config(page_title="Especialista DiamondOne", layout="wide")
 
 @st.cache_resource
 def carregar_e_processar_dados():
+    # ...(código da função sem alterações)...
     caminho_dados = "dados/"
     documentos_padrao = []
-    
     for nome_arquivo in os.listdir(caminho_dados):
         if nome_arquivo == "GlossarioDiamondone.txt": continue
         caminho_completo = os.path.join(caminho_dados, nome_arquivo)
@@ -31,10 +31,8 @@ def carregar_e_processar_dados():
             elif nome_arquivo.endswith(".docx"): loader = Docx2txtLoader(caminho_completo)
             documentos_padrao.extend(loader.load())
         except Exception as e: print(f"Erro ao carregar {nome_arquivo}: {e}")
-
     text_splitter_padrao = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks_padrao = text_splitter_padrao.split_documents(documentos_padrao)
-
     chunks_glossario = []
     caminho_glossario = os.path.join(caminho_dados, "GlossarioDiamondone.txt")
     try:
@@ -44,13 +42,13 @@ def carregar_e_processar_dados():
         for entrada in entradas_glossario:
             chunks_glossario.append(Document(page_content=entrada, metadata={"source": "GlossarioDiamondone.txt"}))
     except Exception as e: print(f"Erro ao processar glossário: {e}")
-
     todos_os_chunks = chunks_padrao + chunks_glossario
     embeddings = HuggingFaceEmbeddings(model_name='paraphrase-multilingual-MiniLM-L12-v2')
     db = FAISS.from_documents(todos_os_chunks, embeddings)
     return db.as_retriever(search_type="mmr", search_kwargs={"k": 5})
 
 # --- 3. DEFINIÇÃO DAS PERSONAS E AVATARES ---
+# ...(código das personas sem alterações)...
 prompt_template_geral = ChatPromptTemplate.from_template("""
 Você é um consultor especialista no sistema DiamondOne para indústrias de manufatura. Sua tarefa é responder à pergunta do usuário de forma clara, profissional e objetiva. Baseie sua resposta estritamente no seguinte contexto extraído da documentação:
 <context>{context}</context>
@@ -80,23 +78,21 @@ Você é um "Analista de Conhecimento" sênior. Sua tarefa é criar uma definiç
 **Texto para Análise:** {input}
 **Definição Otimizada:**
 """)
-
 personas = {
     "Consultor Geral": prompt_template_geral,
     "Estrategista de Marketing": prompt_template_marketing,
     "Analista de Implementação": prompt_template_implementacao,
     "Analista de Conhecimento (Híbrido)": prompt_template_analista
 }
-
 avatares = {
-    "user": "👤",
+    "User": "👤",
     "Consultor Geral": "💬",
     "Estrategista de Marketing": "📈",
     "Analista de Implementação": "🛠️",
     "Analista de Conhecimento (Híbrido)": "🔬"
 }
 
-# --- 4. CONSTRUÇÃO DA INTERFACE COM MEMÓRIA E AVATARES ---
+# --- 4. CONSTRUÇÃO DA INTERFACE FINAL V2.5 ---
 st.title("🤖 Especialista Virtual DiamondOne V2.5")
 st.sidebar.title("Configurações")
 modo_selecionado_nome = st.sidebar.selectbox("Selecione a Persona:", options=list(personas.keys()))
@@ -106,46 +102,64 @@ st.header(f"Conversando com o {modo_selecionado_nome}")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Exibe o histórico com nomes e avatares
 for message in st.session_state.messages:
     avatar = avatares.get(message["role"], "🤖")
     with st.chat_message(message["role"], avatar=avatar):
+        # MUDANÇA AQUI: Exibimos o nome explicitamente
+        st.markdown(f'**{message["role"]}**')
         st.markdown(message["content"])
 
 prompt_usuario = st.chat_input("Faça sua pergunta...")
 
 if prompt_usuario:
-    st.session_state.messages.append({"role": "user", "content": prompt_usuario})
-    with st.chat_message("user", avatar=avatares["user"]):
+    st.session_state.messages.append({"role": "User", "content": prompt_usuario})
+    with st.chat_message("User", avatar=avatares["User"]):
+        # MUDANÇA AQUI: Exibimos o nome "User" explicitamente
+        st.markdown(f'**User**')
         st.markdown(prompt_usuario)
 
     with st.chat_message(modo_selecionado_nome, avatar=avatares[modo_selecionado_nome]):
-        with st.spinner("Analisando..."):
-            try:
-                if os.getenv("GOOGLE_API_KEY") is None or os.getenv("TAVILY_API_KEY") is None:
-                    st.error("Chaves de API não carregadas! Verifique os segredos no Streamlit Cloud.")
-                    st.stop()
+        # MUDANÇA AQUI: Exibimos o nome da persona explicitamente
+        st.markdown(f'**{modo_selecionado_nome}**')
+        
+        # Cria um placeholder para o efeito de streaming
+        placeholder = st.empty()
+        resposta_completa = ""
+        
+        try:
+            if os.getenv("GOOGLE_API_KEY") is None or os.getenv("TAVILY_API_KEY") is None:
+                st.error("Chaves de API não carregadas! Verifique os segredos no Streamlit Cloud.")
+                st.stop()
 
-                retriever = carregar_e_processar_dados()
-                llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.5)
-                prompt_selecionado = personas[modo_selecionado_nome]
-                
-                resposta_assistente = ""
-                if modo_selecionado_nome == "Analista de Conhecimento (Híbrido)":
-                    search_tool = TavilySearchResults()
-                    web_results = search_tool.invoke({"query": f"definição de {prompt_usuario} em manufatura"})
-                    docs_internos = retriever.invoke(prompt_usuario)
-                    synthesis_chain = create_stuff_documents_chain(llm, prompt_selecionado)
-                    resposta_assistente = synthesis_chain.invoke({
-                        "input": prompt_usuario, "context": docs_internos, "web_search_results": web_results
-                    })
-                else:
-                    document_chain = create_stuff_documents_chain(llm, prompt_selecionado)
-                    chain = create_retrieval_chain(retriever, document_chain)
-                    response_dict = chain.invoke({"input": prompt_usuario})
-                    resposta_assistente = response_dict["answer"]
-                
-                st.markdown(resposta_assistente)
-                st.session_state.messages.append({"role": modo_selecionado_nome, "content": resposta_assistente})
+            retriever = carregar_e_processar_dados()
+            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.5, streaming=True)
+            prompt_selecionado = personas[modo_selecionado_nome]
+            
+            def stream_resposta_gerador(stream_chunks):
+                for chunk in stream_chunks:
+                    content = chunk.get("answer") or chunk.get("text") or (chunk if isinstance(chunk, str) else "")
+                    yield content
 
-            except Exception as e:
-                st.error(f"Ocorreu um erro: {e}")
+            if modo_selecionado_nome == "Analista de Conhecimento (Híbrido)":
+                search_tool = TavilySearchResults()
+                web_results = search_tool.invoke({"query": f"definição de {prompt_usuario} em manufatura"})
+                docs_internos = retriever.invoke(prompt_usuario)
+                synthesis_chain = create_stuff_documents_chain(llm, prompt_selecionado)
+                stream_chunks = synthesis_chain.stream({
+                    "input": prompt_usuario, "context": docs_internos, "web_search_results": web_results
+                })
+                resposta_completa = placeholder.write_stream(stream_resposta_gerador(stream_chunks))
+            else:
+                document_chain = create_stuff_documents_chain(llm, prompt_selecionado)
+                chain = create_retrieval_chain(retriever, document_chain)
+                stream_chunks = chain.stream({"input": prompt_usuario})
+                resposta_completa = placeholder.write_stream(stream_resposta_gerador(stream_chunks))
+            
+            # Atualiza o histórico com a resposta final
+            st.session_state.messages.append({"role": modo_selecionado_nome, "content": resposta_completa})
+
+        except Exception as e:
+            st.error(f"Ocorreu um erro: {e}")
+            # Limpa o placeholder em caso de erro
+            placeholder.empty()
