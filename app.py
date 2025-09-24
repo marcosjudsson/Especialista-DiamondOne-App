@@ -1,4 +1,4 @@
-# --- 1. IMPORTAÇÕES COMPLETAS ---
+# --- 1. IMPORTAÇÕES (sem alterações) ---
 import streamlit as st
 import os
 from dotenv import load_dotenv
@@ -11,17 +11,16 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-# --- NOVA IMPORTAÇÃO PARA A FERRAMENTA DE BUSCA ---
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-# Carrega as variáveis do arquivo .env
 load_dotenv()
 
-# --- 2. CONFIGURAÇÃO DA PÁGINA E CACHE ---
+# --- 2. CONFIGURAÇÃO E CACHE (sem alterações) ---
 st.set_page_config(page_title="Especialista DiamondOne", layout="wide")
 
 @st.cache_resource
 def carregar_e_processar_dados():
+    # ... (toda a função continua exatamente igual)
     caminho_dados = "dados/"
     documentos_padrao = []
     
@@ -49,13 +48,11 @@ def carregar_e_processar_dados():
 
     todos_os_chunks = chunks_padrao + chunks_glossario
     embeddings = HuggingFaceEmbeddings(model_name='paraphrase-multilingual-MiniLM-L12-v2')
-    
-    # --- MUDANÇA NA CRIAÇÃO DO BANCO DE VETORES ---
     db = FAISS.from_documents(todos_os_chunks, embeddings)
-    
     return db.as_retriever(search_type="mmr", search_kwargs={"k": 5})
 
-# --- 3. DEFINIÇÃO DAS PERSONAS ---
+# --- 3. DEFINIÇÃO DAS PERSONAS (sem alterações) ---
+# ... (todos os 4 prompts continuam iguais)
 prompt_template_geral = ChatPromptTemplate.from_template("""
 Você é um consultor especialista no sistema DiamondOne para indústrias de manufatura. Sua tarefa é responder à pergunta do usuário de forma clara, profissional e objetiva. Baseie sua resposta estritamente no seguinte contexto extraído da documentação:
 <context>{context}</context>
@@ -102,67 +99,65 @@ personas = {
     "Analista de Conhecimento (Híbrido)": prompt_template_analista
 }
 
-# --- 4. CONSTRUÇÃO DA INTERFACE (com lógica condicional) ---
-st.title("🤖 Especialista Virtual DiamondOne V2.0")
-st.caption("Desenvolvido com a mentoria do CriAi")
-
+# --- 4. CONSTRUÇÃO DA INTERFACE COM MEMÓRIA ---
+st.title("🤖 Especialista Virtual DiamondOne V2.5")
 st.sidebar.title("Configurações")
 modo_selecionado_nome = st.sidebar.selectbox("Selecione a Persona:", options=list(personas.keys()))
-prompt_selecionado = personas[modo_selecionado_nome]
 
 st.header(f"Conversando com o {modo_selecionado_nome}")
 
-# --- LÓGICA DE INTERFACE CUSTOMIZADA ---
-if modo_selecionado_nome == "Analista de Conhecimento (Híbrido)":
-    st.info("Cole abaixo um artigo, e-mail ou qualquer texto para que o especialista sugira novos termos para o nosso glossário.")
-    pergunta_usuario = st.text_area("Texto para análise:", height=300)
-else:
-    pergunta_usuario = st.text_input("Faça sua pergunta ou descreva a tarefa:")
-# ----------------------------------------
+# --- NOVA LÓGICA DE MEMÓRIA (Session State) ---
+# Inicializa o histórico de chat se ele não existir
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-if pergunta_usuario:
-    with st.spinner("Processando..."):
-        try:
-            if os.getenv("GOOGLE_API_KEY") is None or os.getenv("TAVILY_API_KEY") is None:
-                st.error("Chaves de API não carregadas do arquivo .env!")
-                st.stop()
+# Exibe as mensagens do histórico a cada re-execução
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+# ------------------------------------------------
 
-            retriever = carregar_e_processar_dados()
-            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.3)
+# Define o prompt (caixa de texto) para a entrada do usuário
+prompt_usuario = st.chat_input("Faça sua pergunta...")
 
-            # --- LÓGICA CUSTOMIZADA PARA O ANALISTA HÍBRIDO ---
-            if modo_selecionado_nome == "Analista de Conhecimento (Híbrido)":
-                st.subheader("Análise Híbrida em Andamento...")
+if prompt_usuario:
+    # Adiciona a mensagem do usuário ao histórico e exibe na tela
+    st.session_state.messages.append({"role": "user", "content": prompt_usuario})
+    with st.chat_message("user"):
+        st.markdown(prompt_usuario)
+
+    # Exibe uma mensagem de "pensando" enquanto processa
+    with st.chat_message("assistant"):
+        with st.spinner("Analisando..."):
+            try:
+                # Lógica de execução da IA (similar à anterior)
+                if os.getenv("GOOGLE_API_KEY") is None or os.getenv("TAVILY_API_KEY") is None:
+                    st.error("Chaves de API não carregadas! Verifique os segredos.")
+                    st.stop()
+
+                retriever = carregar_e_processar_dados()
+                llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.5)
+                prompt_selecionado = personas[modo_selecionado_nome]
                 
-                # Passo 1: Busca na Web
-                search_tool = TavilySearchResults()
-                web_results = search_tool.invoke({"query": f"O que é {pergunta_usuario} na indústria de manufatura"})
+                # A lógica do Analista Híbrido é diferente
+                if modo_selecionado_nome == "Analista de Conhecimento (Híbrido)":
+                    search_tool = TavilySearchResults()
+                    web_results = search_tool.invoke({"query": f"definição de {prompt_usuario} em manufatura"})
+                    docs_internos = retriever.invoke(prompt_usuario)
+                    synthesis_chain = create_stuff_documents_chain(llm, prompt_selecionado)
+                    resposta_assistente = synthesis_chain.invoke({
+                        "input": prompt_usuario, "context": docs_internos, "web_search_results": web_results
+                    })
+                else: # Lógica padrão para as outras personas
+                    document_chain = create_stuff_documents_chain(llm, prompt_selecionado)
+                    chain = create_retrieval_chain(retriever, document_chain)
+                    response_dict = chain.invoke({"input": prompt_usuario})
+                    resposta_assistente = response_dict["answer"]
                 
-                # Passo 2: Busca no nosso glossário
-                docs_internos = retriever.invoke(pergunta_usuario)
+                # Exibe a resposta do assistente
+                st.markdown(resposta_assistente)
+                # Adiciona a resposta do assistente ao histórico
+                st.session_state.messages.append({"role": "assistant", "content": resposta_assistente})
 
-                # Passo 3: Criação da cadeia de síntese final
-                synthesis_chain = create_stuff_documents_chain(llm, prompt_selecionado)
-                
-                # Invocamos a cadeia com todas as informações
-                response = synthesis_chain.invoke({
-                    "input": pergunta_usuario,
-                    "context": docs_internos,
-                    "web_search_results": web_results
-                })
-                
-                st.success("Análise Híbrida Concluída!")
-                st.subheader("Definição Otimizada Sugerida:")
-                st.markdown(response)
-
-            else: # Lógica padrão para as outras personas
-                document_chain = create_stuff_documents_chain(llm, prompt_selecionado)
-                chain = create_retrieval_chain(retriever, document_chain)
-                response = chain.invoke({"input": pergunta_usuario})
-                
-                st.success("Resposta Recebida!")
-                st.subheader("Resposta do Especialista:")
-                st.markdown(response["answer"])
-
-        except Exception as e:
-            st.error(f"Ocorreu um erro: {e}")
+            except Exception as e:
+                st.error(f"Ocorreu um erro: {e}")
