@@ -8,3 +8,5 @@ pypdf
 docx2txt
 sentence-transformers
 faiss-cpu
+tavily-python
+sqlalchemy
