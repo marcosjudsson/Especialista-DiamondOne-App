@@ -10,3 +10,4 @@ sentence-transformers
 faiss-cpu
 tavily-python
 sqlalchemy
+PyGithub

@@ -14,8 +14,10 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import HumanMessage, AIMessage
+from github import Github
+from github.GithubException import UnknownObjectException
 
-# Carrega as variáveis do arquivo .env
+# Carrega as variáveis do arquivo .env (para desenvolvimento local)
 load_dotenv()
 
 # --- 2. GERENCIAMENTO DO BANCO DE DADOS DE PERSONAS (SQLITE) ---
@@ -29,8 +31,7 @@ def criar_tabela_personas():
 @st.cache_data(ttl=3600)
 def buscar_personas():
     df = conn.query('SELECT nome, prompt FROM personas', ttl=600)
-    if df.empty:
-        return {}
+    if df.empty: return {}
     return {row['nome']: row['prompt'] for index, row in df.iterrows()}
 
 def atualizar_persona(nome, prompt):
@@ -57,30 +58,54 @@ def carregar_e_processar_dados():
     caminho_dados = "dados/"
     documentos_padrao = []
     for nome_arquivo in os.listdir(caminho_dados):
-        if nome_arquivo == "GlossarioDiamondone.txt": continue
+        if nome_arquivo == ".gitkeep": continue
         caminho_completo = os.path.join(caminho_dados, nome_arquivo)
         try:
             if nome_arquivo.endswith(".pdf"): loader = PyPDFLoader(caminho_completo)
             elif nome_arquivo.endswith(".docx"): loader = Docx2txtLoader(caminho_completo)
+            elif nome_arquivo.endswith(".txt"): loader = PyPDFLoader(caminho_completo)
             documentos_padrao.extend(loader.load())
         except Exception as e: print(f"Erro ao carregar {nome_arquivo}: {e}")
     text_splitter_padrao = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks_padrao = text_splitter_padrao.split_documents(documentos_padrao)
-    chunks_glossario = []
-    caminho_glossario = os.path.join(caminho_dados, "GlossarioDiamondone.txt")
-    try:
-        with open(caminho_glossario, 'r', encoding='utf-8') as f:
-            conteudo_glossario = f.read()
-        entradas_glossario = conteudo_glossario.strip().split('\n\n')
-        for entrada in entradas_glossario:
-            chunks_glossario.append(Document(page_content=entrada, metadata={"source": "GlossarioDiamondone.txt"}))
-    except Exception as e: print(f"Erro ao processar glossário: {e}")
-    todos_os_chunks = chunks_padrao + chunks_glossario
     embeddings = HuggingFaceEmbeddings(model_name='paraphrase-multilingual-MiniLM-L12-v2')
-    db = FAISS.from_documents(todos_os_chunks, embeddings)
+    db = FAISS.from_documents(chunks_padrao, embeddings)
     return db.as_retriever(search_type="mmr", search_kwargs={"k": 5})
 
-# --- 4. DADOS PADRÃO E AVATARES ---
+# --- 4. FUNÇÕES DE INTEGRAÇÃO COM O GITHUB ---
+@st.cache_resource
+def get_github_repo():
+    token = os.getenv("GITHUB_TOKEN") or st.secrets.get("GITHUB_TOKEN")
+    repo_nome = os.getenv("GITHUB_REPO") or st.secrets.get("GITHUB_REPO")
+    if not token or not repo_nome:
+        return None
+    g = Github(token)
+    return g.get_repo(repo_nome)
+
+@st.cache_data(ttl=60)
+def get_repo_files():
+    repo = get_github_repo()
+    if repo:
+        try:
+            contents = repo.get_contents("dados")
+            return [content.name for content in contents if content.name != ".gitkeep"]
+        except UnknownObjectException:
+            return []
+    return []
+
+def upload_file_to_github(file_name, file_content):
+    repo = get_github_repo()
+    if repo:
+        path_no_repo = f"dados/{file_name}"
+        try:
+            contents = repo.get_contents(path_no_repo, ref="main")
+            repo.update_file(contents.path, f"DOCS: Atualiza documento via app: {file_name}", file_content, contents.sha, branch="main")
+        except UnknownObjectException:
+            repo.create_file(path_no_repo, f"DOCS: Adiciona novo documento via app: {file_name}", file_content, branch="main")
+        return True
+    return False
+
+# --- 5. DADOS PADRÃO E AVATARES ---
 PERSONAS_PADRAO = {
     "Consultor Geral": """Você é um consultor especialista no sistema DiamondOne para indústrias de manufatura. Sua tarefa é responder à pergunta do usuário de forma clara, profissional e objetiva. Baseie sua resposta estritamente no seguinte contexto extraído da documentação:\n<context>{context}</context>\nPergunta: {input}""",
     "Estrategista de Marketing": """Você é o "Marketer DiamondOne", um especialista em marketing de produto B2B para a indústria de manufatura. Sua missão é traduzir características técnicas em benefícios de negócio claros e atraentes, usando uma linguagem persuasiva e autêntica. Para estabelecer credibilidade, incorpore termos do léxico da indústria de forma natural em sua comunicação.\n<context>{context}</context>\nTarefa de Marketing: {input}""",
@@ -92,12 +117,12 @@ AVATARES = {
     "Analista de Implementação": "🛠️", "Analista de Conhecimento (Híbrido)": "🔬"
 }
 
-# --- 5. APLICAÇÃO PRINCIPAL ---
+# --- 6. APLICAÇÃO PRINCIPAL ---
 criar_tabela_personas()
-st.title("🤖 Especialista Virtual DiamondOne V2.9")
+st.title("🤖 Especialista Virtual DiamondOne V3.0")
 
 st.sidebar.title("Navegação")
-pagina = st.sidebar.radio("Selecione uma página:", ["Chat com Especialista", "Gerenciador de Personas"])
+pagina = st.sidebar.radio("Selecione uma página:", ["Chat com Especialista", "Gerenciador de Personas", "Gerenciador de Conhecimento"])
 
 personas_db = buscar_personas()
 
@@ -111,12 +136,9 @@ if pagina == "Chat com Especialista":
     modo_selecionado_nome = st.sidebar.selectbox("Selecione a Persona:", options=list(personas_db.keys()))
     st.header(f"Conversando com o {modo_selecionado_nome}")
 
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = {}
+    if "chat_history" not in st.session_state: st.session_state.chat_history = {}
+    if modo_selecionado_nome not in st.session_state.chat_history: st.session_state.chat_history[modo_selecionado_nome] = []
     
-    if modo_selecionado_nome not in st.session_state.chat_history:
-        st.session_state.chat_history[modo_selecionado_nome] = []
-
     for message in st.session_state.chat_history[modo_selecionado_nome]:
         avatar = AVATARES.get(message.type, AVATARES.get(modo_selecionado_nome))
         with st.chat_message(message.type, avatar=avatar):
@@ -132,37 +154,29 @@ if pagina == "Chat com Especialista":
             st.markdown(f'**{modo_selecionado_nome}**')
             placeholder = st.empty()
             try:
-                if os.getenv("GOOGLE_API_KEY") is None: 
-                    st.error("Chave de API do Google não carregada!"); st.stop()
+                if os.getenv("GOOGLE_API_KEY") is None: st.error("Chave de API do Google não carregada!"); st.stop()
                 
                 retriever = carregar_e_processar_dados()
-                llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-001", temperature=0.5, streaming=True)
-                
+                llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.5, streaming=True)
                 prompt_texto_selecionado = personas_db[modo_selecionado_nome]
                 
                 contextualize_q_prompt = ChatPromptTemplate.from_messages([
                     ("system", "Dada a conversa abaixo e a última pergunta do usuário, formule uma pergunta autônoma que possa ser entendida sem o histórico da conversa. Não responda à pergunta, apenas a reformule se necessário, caso contrário, retorne-a como está."),
-                    ("placeholder", "{chat_history}"),
-                    ("human", "{input}"),
+                    ("placeholder", "{chat_history}"), ("human", "{input}"),
                 ])
                 history_aware_retriever = create_history_aware_retriever(llm, retriever, contextualize_q_prompt)
                 
                 qa_prompt = ChatPromptTemplate.from_messages([
-                    ("system", prompt_texto_selecionado),
-                    ("placeholder", "{chat_history}"),
-                    ("human", "{input}"),
+                    ("system", prompt_texto_selecionado), ("placeholder", "{chat_history}"), ("human", "{input}"),
                 ])
                 question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
                 rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
                 chat_history_langchain = st.session_state.chat_history[modo_selecionado_nome][:-1]
                 
-                # CORREÇÃO FINAL AQUI
                 def stream_resposta_gerador(stream_chunks):
                     for chunk in stream_chunks:
-                        # Procura pela chave 'answer' e só retorna o conteúdo se ela existir
-                        if answer_chunk := chunk.get("answer"):
-                            yield answer_chunk
+                        if answer_chunk := chunk.get("answer"): yield answer_chunk
 
                 stream_chunks = rag_chain.stream({"input": prompt_usuario, "chat_history": chat_history_langchain})
                 resposta_completa = placeholder.write_stream(stream_resposta_gerador(stream_chunks))
@@ -182,41 +196,67 @@ elif pagina == "Gerenciador de Personas":
             submitted = st.form_submit_button("Criar Persona")
             if submitted:
                 if novo_nome and novo_prompt:
-                    criar_nova_persona(novo_nome, novo_prompt)
-                    st.success(f"Persona '{novo_nome}' criada com sucesso!")
-                    st.rerun()
+                    criar_nova_persona(novo_nome, novo_prompt); st.success(f"Persona '{novo_nome}' criada!"); st.rerun()
                 else:
                     st.error("Por favor, preencha o nome e o prompt.")
 
     st.divider()
-    
     personas_editor_df = conn.query('SELECT nome, prompt FROM personas', ttl=10)
     
     if personas_editor_df.empty:
-        st.warning("O banco de dados de personas está vazio.")
+        st.warning("O banco de dados de personas está vazio. Crie sua primeira persona acima ou crie os padrões abaixo.")
         if st.button("Criar Personas Padrão"):
             with conn.session as s:
                 for nome, prompt_texto in PERSONAS_PADRAO.items():
                     s.execute(text('INSERT OR REPLACE INTO personas (nome, prompt) VALUES (:nome, :prompt);'), params=dict(nome=nome, prompt=prompt_texto))
                 s.commit()
-            st.success("Personas padrão criadas com sucesso!")
-            st.rerun()
+            st.success("Personas padrão criadas!"); st.rerun()
     else:
         st.subheader("Editar Personas Existentes")
         lista_nomes_personas = personas_editor_df['nome'].tolist()
         persona_para_editar = st.selectbox("Selecione uma persona para editar:", options=lista_nomes_personas)
-        
         prompt_atual = personas_editor_df[personas_editor_df['nome'] == persona_para_editar]['prompt'].iloc[0]
-        
         prompt_editado = st.text_area("Edite o prompt:", value=prompt_atual, height=300, key=f"editor_{persona_para_editar}")
         
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([3,1])
         with col1:
             if st.button("Salvar Alterações"):
-                atualizar_persona(persona_para_editar, prompt_editado)
-                st.success(f"Persona '{persona_para_editar}' atualizada!")
+                atualizar_persona(persona_para_editar, prompt_editado); st.success(f"Persona '{persona_para_editar}' atualizada!")
         with col2:
             if st.button("❌ Deletar Persona", type="primary"):
-                deletar_persona(persona_para_editar)
-                st.success(f"Persona '{persona_para_editar}' deletada!")
+                deletar_persona(persona_para_editar); st.success(f"Persona '{persona_para_editar}' deletada!"); st.rerun()
+
+elif pagina == "Gerenciador de Conhecimento":
+    st.header("📚 Gerenciador de Conhecimento")
+    st.info("Adicione ou remova documentos da base de conhecimento do especialista.")
+    
+    repo = get_github_repo()
+    if not repo:
+        st.error("Configuração do GitHub não encontrada. Adicione GITHUB_TOKEN e GITHUB_REPO aos seus segredos."); st.stop()
+
+    st.subheader("Documentos Atuais na Base:")
+    with st.spinner("Carregando lista de documentos do repositório..."):
+        lista_de_arquivos = get_repo_files()
+        if not lista_de_arquivos: st.write("Nenhum documento na base de conhecimento.")
+        else:
+            for arquivo in lista_de_arquivos: st.write(f"- `{arquivo}`")
+
+    st.divider()
+
+    st.subheader("Adicionar Novos Documentos:")
+    uploaded_files = st.file_uploader("Selecione um ou mais arquivos para enviar ao GitHub", type=['pdf', 'docx', 'txt'], accept_multiple_files=True)
+
+    if uploaded_files:
+        if st.button("Enviar Arquivos para a Base de Conhecimento"):
+            success_count = 0
+            for uploaded_file in uploaded_files:
+                file_content = uploaded_file.getvalue()
+                with st.spinner(f"Fazendo upload de '{uploaded_file.name}' para o GitHub..."):
+                    success = upload_file_to_github(uploaded_file.name, file_content)
+                    if success: st.success(f"'{uploaded_file.name}' enviado com sucesso!"); success_count += 1
+            
+            if success_count > 0:
+                st.info("Limpando cache e reiniciando para incorporar o novo conhecimento. O aplicativo irá recarregar.")
+                st.cache_resource.clear()
+                st.cache_data.clear()
                 st.rerun()
