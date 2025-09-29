@@ -157,7 +157,7 @@ if pagina == "Chat com Especialista":
                 if os.getenv("GOOGLE_API_KEY") is None: st.error("Chave de API do Google não carregada!"); st.stop()
                 
                 retriever = carregar_e_processar_dados()
-                llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.5, streaming=True)
+                llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0.5, streaming=True)
                 prompt_texto_selecionado = personas_db[modo_selecionado_nome]
                 
                 contextualize_q_prompt = ChatPromptTemplate.from_messages([
